@@ -6,7 +6,7 @@ require 'yaml'
 require 'rspreadsheet'
 require 'pry'
 
-credential_file = ENV['HOME'] + '/.sansa-report/redmine.yml'
+credential_file = ENV['HOME'] + '/.aoidos/redmine.yml'
 
 unless File.exist? credential_file
 	sample_content = "home: 'http://redmine.example.com'\nkey: REDMINE_API_KEY"
