@@ -1,0 +1,68 @@
+#!/usr/bin/env ruby
+# vim: syntax=ruby ts=4 sw=4 et nolist:
+
+require 'minedig'
+require 'yaml'
+require 'rspreadsheet'
+require 'pry'
+
+credential_file = ENV['HOME'] + '/.sansa-report/redmine.yml'
+
+unless File.exist? credential_file
+	sample_content = "home: 'http://redmine.example.com'\nkey: REDMINE_API_KEY"
+	raise Errno::ENOENT, "Please create %s file with:\n%s" % [
+		credential_file, sample_content
+	]
+end
+
+credential = YAML.load_file(credential_file)
+redmine = Minedig::Redmine.new do |config|
+	config.home = credential['home']  # ex: 'http://project.gnuside.com'
+	config.api_key = credential['key'] # ex: ...
+end
+
+book = Rspreadsheet::Workbook.new
+tickets = redmine.project('catone-smb-device').tickets(count: :all)
+tickets.each do |ticket|
+	type = case ticket.tracker_id
+		   when 2 then :feature # feature
+		   when 4 then :user_story # user story
+		   else :bug
+		   end
+
+    next if type != :user_story
+
+
+    prefix = nil
+    title = nil
+    sheet = nil
+    if ticket.subject.strip =~ /^(\s*As\s+.*?)\s*,\s+i\s+want\s+to\s+(.*)$/i then
+        prefix = $1.strip
+        title = $2.strip
+    else
+        raise "Invalid ticket #{ticket.id} - #{ticket.subject}"
+    end
+    sheet = book.sheet(prefix) || book.create_worksheet(prefix)
+
+    if sheet.rows.size == 0 then
+        [prefix, 'Description', 'Version', 'ID'].each_with_index do |txt,idx|
+            cell = sheet.cell(1,idx+1)
+            cell.value = txt
+            cell.format.bold = true
+            cell.format.color = '#FFFFFF'
+            cell.format.background_color = '#662D91'
+        end
+    end
+
+    nextline = sheet.rows.size + 1
+    ticket_title = "%s%s" % [title[0].upcase, title[1..-1]]
+    ticket_version = (ticket.ticket['fixed_version'] || {'name' => ''})['name']
+	puts "[ %- 8d | %- 30.30s | %- 50.50s ]" % [ticket.id, prefix, ticket_title]
+
+    [title, '', ticket_version, ticket.id].each_with_index do |txt,idx|
+        cell = sheet.cell(nextline,idx+1)
+        cell.value = txt
+    end
+
+end
+book.save('report.ods')
