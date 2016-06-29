@@ -5,64 +5,94 @@ require 'minedig'
 require 'yaml'
 require 'rspreadsheet'
 require 'pry'
+require 'thor'
+require 'semantic'
 
-credential_file = ENV['HOME'] + '/.aoidos/redmine.yml'
-
-unless File.exist? credential_file
-	sample_content = "home: 'http://redmine.example.com'\nkey: REDMINE_API_KEY"
-	raise Errno::ENOENT, "Please create %s file with:\n%s" % [
-		credential_file, sample_content
-	]
-end
-
-credential = YAML.load_file(credential_file)
-redmine = Minedig::Redmine.new do |config|
-	config.home = credential['home']  # ex: 'http://project.gnuside.com'
-	config.api_key = credential['key'] # ex: ...
-end
-
-book = Rspreadsheet::Workbook.new
-tickets = redmine.project('catone-smb-device').tickets(count: :all)
-tickets.each do |ticket|
-	type = case ticket.tracker_id
-		   when 2 then :feature # feature
-		   when 4 then :user_story # user story
-		   else :bug
-		   end
-
-    next if type != :user_story
+class Aoidos < Thor
 
 
-    prefix = nil
-    title = nil
-    sheet = nil
-    if ticket.subject.strip =~ /^(\s*As\s+.*?)\s*,\s+i\s+want\s+to\s+(.*)$/i then
-        prefix = $1.strip
-        title = $2.strip
-    else
-        raise "Invalid ticket #{ticket.id} - #{ticket.subject}"
-    end
-    sheet = book.sheet(prefix) || book.create_worksheet(prefix)
+    desc "export PROJECT", "Export project user stories"
+    def export(project)
+        target_version = make_version '2.0.0'
+        credential_file = ENV['HOME'] + '/.aoidos/redmine.yml'
 
-    if sheet.rows.size == 0 then
-        [prefix, 'Description', 'Version', 'ID'].each_with_index do |txt,idx|
-            cell = sheet.cell(1,idx+1)
-            cell.value = txt
-            cell.format.bold = true
-            cell.format.color = '#FFFFFF'
-            cell.format.background_color = '#662D91'
+        unless File.exist? credential_file
+	        sample_content = "home: 'http://redmine.example.com'\nkey: REDMINE_API_KEY"
+	        raise Errno::ENOENT, "Please create %s file with:\n%s" % [
+		        credential_file, sample_content
+	        ]
         end
+
+        credential = YAML.load_file(credential_file)
+        redmine = Minedig::Redmine.new do |config|
+	        config.home = credential['home']  # ex: 'http://project.gnuside.com'
+	        config.api_key = credential['key'] # ex: ...
+        end
+
+        book = Rspreadsheet::Workbook.new
+        tickets = redmine.project(project).tickets(count: :all)
+        tickets.each do |ticket|
+	        type = case ticket.tracker_id
+		           when 2 then :feature # feature
+		           when 4 then :user_story # user story
+		           else :bug
+		           end
+
+            next if type != :user_story
+
+
+            prefix = nil
+            title = nil
+            sheet = nil
+            if ticket.subject.strip =~ /^(\s*As\s+.*?)\s*,\s+i\s+want\s+to\s+(.*)$/i then
+                prefix = $1.strip
+                title = $2.strip
+            else
+                raise "Invalid ticket #{ticket.id} - #{ticket.subject}"
+            end
+            sheet = book.sheet(prefix) || book.create_worksheet(prefix)
+
+            if sheet.rows.size == 0 then
+                [prefix, 'Description', 'Version', 'ID'].each_with_index do |txt,idx|
+                    cell = sheet.cell(1,idx+1)
+                    cell.value = txt
+                    cell.format.bold = true
+                    cell.format.color = '#FFFFFF'
+                    cell.format.background_color = '#662D91'
+                end
+            end
+
+            nextline = sheet.rows.size + 1
+            ticket_title = "%s%s" % [title[0].upcase, title[1..-1]]
+            ticket_version = 
+                (ticket.ticket['fixed_version'] || {'name' => ''})['name']
+                .split(/\s+-\s+/)[0]
+
+            ticket_version_obj = make_version ticket_version.gsub(/^v/,'')
+	        puts "[ %- 8d | %- 30.30s | %- 50.50s ]" % [ticket.id, prefix, ticket_title]
+
+            [ticket_title, '', ticket_version, ticket.id].each_with_index do |txt,idx|
+                cell = sheet.cell(nextline,idx+1)
+                cell.value = txt
+                if ticket_version_obj <= target_version then
+                    cell.format.bold = true
+                    cell.format.color = '#000000'
+                else 
+                    cell.format.color = '#888888'
+                end
+            end
+
+        end
+        book.save(project + '.ods')
     end
 
-    nextline = sheet.rows.size + 1
-    ticket_title = "%s%s" % [title[0].upcase, title[1..-1]]
-    ticket_version = (ticket.ticket['fixed_version'] || {'name' => ''})['name']
-	puts "[ %- 8d | %- 30.30s | %- 50.50s ]" % [ticket.id, prefix, ticket_title]
+    private
 
-    [title, '', ticket_version, ticket.id].each_with_index do |txt,idx|
-        cell = sheet.cell(nextline,idx+1)
-        cell.value = txt
+    def make_version str
+        return Semantic::Version.new str
+    rescue ArgumentError
+        make_version str + '.0'
     end
-
 end
-book.save('report.ods')
+
+Aoidos.start(ARGV)
