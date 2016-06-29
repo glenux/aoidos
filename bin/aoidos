@@ -9,11 +9,9 @@ require 'thor'
 require 'semantic'
 
 class Aoidos < Thor
+    def initialize *args
+        super
 
-
-    desc "export PROJECT", "Export project user stories"
-    def export(project)
-        target_version = make_version '2.0.0'
         credential_file = ENV['HOME'] + '/.aoidos/redmine.yml'
 
         unless File.exist? credential_file
@@ -22,24 +20,31 @@ class Aoidos < Thor
 		        credential_file, sample_content
 	        ]
         end
-
         credential = YAML.load_file(credential_file)
-        redmine = Minedig::Redmine.new do |config|
+
+        @redmine = Minedig::Redmine.new do |config|
 	        config.home = credential['home']  # ex: 'http://project.gnuside.com'
 	        config.api_key = credential['key'] # ex: ...
         end
+    end
+
+
+    option :output, aliases: "-o", desc: "Set ODS output file name"
+    desc "export PROJECT", "Export project user stories"
+    def export(project)
+        target_version = make_version '2.0.0'
+
+        book_filename = options[:output] || (project + '.ods')
 
         book = Rspreadsheet::Workbook.new
-        tickets = redmine.project(project).tickets(count: :all)
+        tickets = @redmine.project(project).tickets(count: :all)
         tickets.each do |ticket|
 	        type = case ticket.tracker_id
 		           when 2 then :feature # feature
 		           when 4 then :user_story # user story
 		           else :bug
 		           end
-
             next if type != :user_story
-
 
             prefix = nil
             title = nil
@@ -83,7 +88,7 @@ class Aoidos < Thor
             end
 
         end
-        book.save(project + '.ods')
+        book.save(book_filename)
     end
 
     private
