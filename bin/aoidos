@@ -6,6 +6,16 @@ require 'yaml'
 require 'rspreadsheet'
 require 'pry'
 
+project_id = ARGV[0]
+if project_id.nil?  then
+    puts "Missing project name. Exiting."
+    exit 1
+end
+
+puts "Exporting project #{project_id}.ods"
+
+STATUS_CLOSED = 5
+
 credential_file = ENV['HOME'] + '/.aoidos/redmine.yml'
 
 unless File.exist? credential_file
@@ -22,7 +32,7 @@ redmine = Minedig::Redmine.new do |config|
 end
 
 book = Rspreadsheet::Workbook.new
-tickets = redmine.project('catone-smb-device').tickets(count: :all)
+tickets = redmine.project(project_id).tickets(count: :all)
 tickets.each do |ticket|
 	type = case ticket.tracker_id
 		   when 2 then :feature # feature
@@ -58,11 +68,18 @@ tickets.each do |ticket|
     ticket_title = "%s%s" % [title[0].upcase, title[1..-1]]
     ticket_version = (ticket.ticket['fixed_version'] || {'name' => ''})['name']
 	puts "[ %- 8d | %- 30.30s | %- 50.50s ]" % [ticket.id, prefix, ticket_title]
+    # puts ticket.inspect
+    ticket_status = ticket.ticket['status']['id'].to_i
 
     [title, '', ticket_version, ticket.id].each_with_index do |txt,idx|
         cell = sheet.cell(nextline,idx+1)
         cell.value = txt
+        if ticket_status == STATUS_CLOSED then # closed
+            cell.format.color = '#888888'
+        else
+            cell.format.color = '#000000'
+        end
     end
 
 end
-book.save('report.ods')
+book.save(project_id + '.ods')
