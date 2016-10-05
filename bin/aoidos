@@ -58,13 +58,18 @@ class Aoidos < Thor
             sheet = book.sheet(prefix) || book.create_worksheet(prefix)
 
             if sheet.rows.size == 0 then
-                [prefix, 'Description', 'Version', 'ID'].each_with_index do |txt,idx|
+                [prefix + ', i want to...', 'Description', 'Version', 'ID']
+                .each_with_index do |txt,idx|
                     cell = sheet.cell(1,idx+1)
                     cell.value = txt
                     cell.format.bold = true
                     cell.format.color = '#FFFFFF'
                     cell.format.background_color = '#662D91'
                 end
+             #   sheet.columns(0).format.width = 20
+            #    sheet.columns(1).format.width = 20
+           #     sheet.columns(2).format.width = 8
+          #      sheet.columns(3).format.width = 4
             end
 
             nextline = sheet.rows.size + 1
