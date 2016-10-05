@@ -1,3 +1,8 @@
 Gemfile.lock
+<<<<<<< HEAD
 *.ods
 *.ods#
+=======
+.~lock*
+*.ods
+>>>>>>> c64b0304619181fe571e4fe10831272881487e01
